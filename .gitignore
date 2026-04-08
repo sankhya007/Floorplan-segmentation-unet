@@ -1,0 +1,22 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# datasets
+dataset/
+used_datasets/
+
+# large files
+*.pth
+
+# outputs
+prediction.png
+stitched_mask.png
+
+# system
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
