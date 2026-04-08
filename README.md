@@ -19,7 +19,7 @@ A deep learning-based system to **parse architectural floorplans**, extract stru
 ### Original Floorplan
 
 <p align="center">
-  <img src="assets/original.png" width="500"/>
+  <img src="assets/original.jpg" width="500"/>
 </p>
 
 ---
@@ -27,7 +27,7 @@ A deep learning-based system to **parse architectural floorplans**, extract stru
 ### Raw Model Prediction (Before Fix)
 
 <p align="center">
-  <img src="assets/prediction.png" width="500"/>
+  <img src="assets/prediction.jpg" width="500"/>
 </p>
 
 ---
