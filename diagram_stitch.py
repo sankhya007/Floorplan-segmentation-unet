@@ -102,7 +102,8 @@ gif_path = "assets/stitching.gif"
 imageio.mimsave(
     gif_path,
     frames,
-    fps=6
+    fps=6,
+    loop=0
 )
 
 print(f"✅ GIF saved: {gif_path}")

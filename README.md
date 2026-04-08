@@ -17,17 +17,26 @@ A deep learning-based system to **parse architectural floorplans**, extract stru
 ## Results
 
 ### Original Floorplan
-![Original](assets/original.jpg)
+
+<p align="center">
+  <img src="assets/original.png" width="500"/>
+</p>
 
 ---
 
 ### Raw Model Prediction (Before Fix)
-![Prediction](assets/prediction.jpg)
+
+<p align="center">
+  <img src="assets/prediction.png" width="500"/>
+</p>
 
 ---
 
 ### Final Stitched Output (After Fix)
-![Stitched](assets/stitched.png)
+
+<p align="center">
+  <img src="assets/stitched.png" width="500"/>
+</p>
 
 ---
 
@@ -195,12 +204,20 @@ Large floorplans are processed using a **sliding window approach with overlap**.
 
 ### Visualization
 
-![Stitching](assets/stitching_diagram.png)
+<p align="center">
+  <img src="assets/stitching_diagram.png" width="500"/><br>
+  <em>Overlapping patch concept for stitching</em>
+</p>
 
 ---
 
 ### Stitching in Action
-![Stitching GIF](assets/stitching.gif)
+
+<p align="center">
+  <img src="assets/stitching.gif" width="500"/><br>
+  <em>Sliding window stitching in action</em>
+</p>
+
 The diagram explains how overlapping patches work, while the GIF shows the sliding window processing across the image in real time.
 
 ---
@@ -247,3 +264,9 @@ With overlap:
 ## License
 
 This project is licensed under the MIT License.
+
+---
+
+## Author 
+
+Sankhyapriyo Dey
