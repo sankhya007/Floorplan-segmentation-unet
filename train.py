@@ -176,12 +176,12 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 dataset = FloorplanDataset("dataset/images", "dataset/masks")
 print("Total images:", len(dataset))
-dataset.img_names = dataset.img_names[:1000]
+dataset.img_names = dataset.img_names[:3000]  # if you want to limit the numer of images you are doing the training on use this line 
 loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0)
 print(f"Total batches: {len(loader)}")
 model = UNet().to(device)
 
-# ✅ CORRECT LOSS FOR MULTI-CLASS
+# CORRECT LOSS FOR MULTI-CLASS
 # weights = torch.tensor([0.5, 1.0, 1.0, 1.0]).to(device)
 # loss_fn = nn.CrossEntropyLoss(weight=weights)
 #loss_fn = nn.CrossEntropyLoss()
@@ -210,7 +210,7 @@ print("Starting training...")
 
 #     for imgs, masks in loop:
 #         try:
-#             print("➡️ New batch")
+#             print(" New batch")
 
 #             imgs = imgs.to(device)
 #             masks = masks.to(device)
@@ -231,7 +231,7 @@ print("Starting training...")
 #             print("   Step done")
 
 #         except Exception as e:
-#             print("❌ ERROR OCCURRED:", e)
+#             print(" ERROR OCCURRED:", e)
 #             break
 
 #         total_loss += loss.item()
@@ -247,7 +247,7 @@ print("Starting training...")
 
 #     # save model every epoch
 #     torch.save(model.state_dict(), "unet.pth")
-#     print("✅ Model Saved")
+#     print(" Model Saved")
 
 
 for epoch in range(epochs):
@@ -276,7 +276,7 @@ for epoch in range(epochs):
     print(f"Avg Loss: {avg_loss:.4f}")
 
     torch.save(model.state_dict(), "unet.pth")
-    print("✅ Model Saved")
+    print(" Model Saved")
 
 
-print("\n🎯 TRAINING COMPLETE")
+print("\n TRAINING COMPLETE")

@@ -338,13 +338,14 @@
 
 
 
-
+# this is the mask maer that we are using to make the walls dense and the doors walk through
 import json
 import os
 import cv2
 import numpy as np
 from tqdm import tqdm
 from pycocotools import mask as coco_mask
+import gc
 
 INPUT_BASE = "used_datasets/cubicasa5k-2.v6i.coco"
 OUT_IMG = "dataset/images"
@@ -353,11 +354,15 @@ OUT_MASK = "dataset/masks"
 os.makedirs(OUT_IMG, exist_ok=True)
 os.makedirs(OUT_MASK, exist_ok=True)
 
+WALL_ID = 2
+DOOR_ID = 1
+WINDOW_ID = 3
+
 # Single class (binary)
 CLASS_MAP = {
-    1: 1,
-    2: 1,
-    3: 1
+    1: 1, # these are the sold walls 
+    2: 0, # doors become walk through
+    3: 1  # this is the window i am not goint to turn it into 0 because then whaat the fuck man people are going to start jumping from the windows
 }
 
 
@@ -427,16 +432,22 @@ def convert_split(split):
     if not os.path.exists(json_path):
         return
 
-    print(f"\nProcessing {split}...")
+    print(f"\nProcessing {split}...")   
 
-    with open(json_path) as f:
+    with open(json_path, "r") as f:
         data = json.load(f)
 
+    # build image dict
     images = {img["id"]: img for img in data["images"]}
 
+    # build annotation map
     ann_map = {}
     for ann in data["annotations"]:
         ann_map.setdefault(ann["image_id"], []).append(ann)
+
+    # 🔥 free memory immediately
+    del data
+    gc.collect()
 
     for img_id, img_info in tqdm(images.items()):
 
@@ -447,30 +458,68 @@ def convert_split(split):
             continue
 
         img = cv2.imread(img_path)
+        if img is None:
+            print("Failed to load:", img_path)
+            continue
         h, w = img.shape[:2]
 
         mask = np.zeros((h, w), dtype=np.uint8)
         anns = ann_map.get(img_id, [])
 
+        # =========================
+        # PASS 1: DRAW WALLS + WINDOWS (BLOCKED)
+        # =========================
         for ann in anns:
 
-            class_id = CLASS_MAP.get(ann["category_id"], 0)
-            if class_id == 0:
+            category = ann["category_id"]
+            seg = ann.get("segmentation", None)
+
+            handled = False
+
+            # -------- WALL OR WINDOW --------
+            if category in [WALL_ID, WINDOW_ID]:  # BOTH are blocked 
+
+                if seg is not None:
+                    handled = draw_segmentation(mask, seg, 1, h, w)
+
+                if not handled and "bbox" in ann:
+                    draw_bbox(mask, ann["bbox"], 1, h, w)
+
+
+        # =========================
+        # PASS 2: REMOVE DOORS (MAKE GAPS)
+        # =========================
+        for ann in anns:
+
+            if ann["category_id"] != DOOR_ID:
                 continue
 
             seg = ann.get("segmentation", None)
+            handled = False
 
-            # try segmentation first
-            success = False
+            temp = np.zeros_like(mask)
+
             if seg is not None:
-                success = draw_segmentation(mask, seg, class_id, h, w)
+                handled = draw_segmentation(temp, seg, 1, h, w)
 
-            # fallback to bbox if segmentation fails
-            if not success and "bbox" in ann:
-                draw_bbox(mask, ann["bbox"], class_id, h, w)
+            if not handled and "bbox" in ann:
+                draw_bbox(temp, ann["bbox"], 1, h, w)
+
+            # expanding door region before cutting, because or else there is a small line left here
+            kernel = np.ones((7,7), np.uint8)
+            temp = cv2.dilate(temp, kernel, iterations=1)
+
+            mask[temp > 0] = 0
+                    
+                    
+
 
         if np.sum(mask) == 0:
             print(f"⚠️ EMPTY MASK: {file_name}")
+            
+        # THICKEN WALLS
+        # kernel = np.ones((5,5), np.uint8)
+        # mask = cv2.dilate(mask, kernel, iterations=1)
 
         # save
         new_name = f"{split}_{file_name}"
@@ -483,7 +532,14 @@ def convert_split(split):
         # optional visualization
         vis = np.zeros((h, w, 3), dtype=np.uint8)
         vis[mask == 1] = [255, 255, 255]
-        cv2.imwrite(os.path.join(OUT_MASK, "vis_" + new_name), vis)
+        
+        del img, mask
+        # temp may not always exist, so safe delete
+        if 'temp' in locals():
+            del temp
+        if img_id % 100 == 0:
+            gc.collect()
+   
 
 
 for split in ["train", "valid", "test"]:

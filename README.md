@@ -75,7 +75,7 @@ To fix this, we implemented a **sliding window inference system with overlap and
 
 ---
 
-### Step 3: Weighted Blending (Key Insight 🔥)
+### Step 3: Weighted Blending (Key Insight)
 
 - Center of patch = high confidence  
 - Edges = low confidence  
@@ -109,15 +109,17 @@ final_mask = sum(predictions * weights) / sum(weights)
 
 ## Pipeline
 
-Input Image  
-   ↓  
+```
+        Input Image  
+            V 
 Split into overlapping patches  
-   ↓  
-UNet Prediction  
-   ↓  
-Weighted blending  
-   ↓  
-Final stitched mask  
+            V  
+      UNet Prediction  
+            V  
+     Weighted blending  
+            V  
+    Final stitched mask  
+```
 
 ---
 
@@ -143,6 +145,12 @@ parser-model/
 
 ---
 
+## python
+
+python version used: 3.10.x
+
+---
+
 ## Dataset
 
 This project was trained using the **CubiCasa5K** dataset.
@@ -162,6 +170,14 @@ If you use this dataset in your work, please consider citing the original author
 
 ```
 pip install torch torchvision opencv-python numpy imageio
+```
+
+---
+
+## Requirements
+
+```
+ pip install -r requirements.txt
 ```
 
 ---
