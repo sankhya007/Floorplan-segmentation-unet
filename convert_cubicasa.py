@@ -151,7 +151,7 @@
 
 #                 x, y, bw, bh = ann["bbox"]
 
-#                 # 🔥 SCALE FROM NORMALIZED → PIXELS
+#                 # SCALE FROM NORMALIZED → PIXELS
 #                 if x <= 1 and y <= 1 and bw <= 1 and bh <= 1:
 #                     x = int(x * w)
 #                     y = int(y * h)
@@ -160,7 +160,7 @@
 #                 else:
 #                     x, y, bw, bh = int(x), int(y), int(bw), int(bh)
 
-#                 # 🔥 DRAW FILLED RECTANGLE
+#                 # DRAW FILLED RECTANGLE
 #                 cv2.rectangle(mask, (x, y), (x + bw, y + bh), class_id, -1)
 
 #         print("Mask values:", np.unique(mask))
@@ -185,7 +185,7 @@
 # for split in ["train", "valid", "test"]:
 #     convert_split(split)
 
-# print("\nDONE MULTI-CLASS ✅")
+# print("\nDONE MULTI-CLASS ")
 
 
 
@@ -195,8 +195,8 @@
 
 
 
-# code nof the newer dataset 
-# we are doing the parsing in multilayer, the walls, doors and windows are differently parsed and not all in one 
+# # code nof the newer dataset 
+# # we are doing the parsing in multilayer, the walls, doors and windows are differently parsed and not all in one 
 
 # import json
 # import os
@@ -283,7 +283,7 @@
 
 #                 x, y, bw, bh = ann["bbox"]
 
-#                 # 🔥 SCALE FROM NORMALIZED → PIXELS
+#                 # SCALE FROM NORMALIZED → PIXELS
 #                 if x <= 1 and y <= 1 and bw <= 1 and bh <= 1:
 #                     x = int(x * w)
 #                     y = int(y * h)
@@ -323,7 +323,7 @@
 # for split in ["train", "valid", "test"]:
 #     convert_split(split)
 
-# print("\nDONE MULTI-CLASS ✅")
+# print("\nDONE MULTI-CLASS ")
 
 
 
@@ -338,7 +338,7 @@
 
 
 
-# this is the mask maer that we are using to make the walls dense and the doors walk through
+# this is the mask maer that we are using to make the walls dense and the doors walk through-
 import json
 import os
 import cv2
@@ -545,4 +545,4 @@ def convert_split(split):
 for split in ["train", "valid", "test"]:
     convert_split(split)
 
-print("\nDONE ✅")
+print("\nDONE. ")

@@ -59,9 +59,7 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 
-# -----------------------------
-# DATASET
-# -----------------------------
+# DATASET 
 class FloorplanDataset(Dataset):
     def __init__(self, img_dir, mask_dir):
         self.img_names = sorted(os.listdir(img_dir))
@@ -103,9 +101,7 @@ class FloorplanDataset(Dataset):
         return img, mask
 
 
-# -----------------------------
 # SIMPLE UNET
-# -----------------------------
 class DoubleConv(nn.Module):
     def __init__(self, in_c, out_c):
         super().__init__()
@@ -169,9 +165,7 @@ class UNet(nn.Module):
 
         return self.out(u1)
 
-# -----------------------------
 # TRAINING SETUP
-# -----------------------------
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 dataset = FloorplanDataset("dataset/images", "dataset/masks")
@@ -181,12 +175,6 @@ loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0)
 print(f"Total batches: {len(loader)}")
 model = UNet().to(device)
 
-# CORRECT LOSS FOR MULTI-CLASS
-# weights = torch.tensor([0.5, 1.0, 1.0, 1.0]).to(device)
-# loss_fn = nn.CrossEntropyLoss(weight=weights)
-#loss_fn = nn.CrossEntropyLoss()
-#loss_fn = nn.CrossEntropyLoss(weight=torch.tensor([0.05, 10.0]).to(device))
-
 loss_fn = nn.BCEWithLogitsLoss()
 
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
@@ -194,61 +182,9 @@ optimizer = optim.Adam(model.parameters(), lr=1e-4)
 epochs = 15
 
 
-# -----------------------------
 # TRAIN LOOP
-# -----------------------------
 
 print("Starting training...")
-
-
-# this loop worked previously 
-# for epoch in range(epochs):
-#     model.train()
-#     total_loss = 0
-
-#     loop = tqdm(loader)
-
-#     for imgs, masks in loop:
-#         try:
-#             print(" New batch")
-
-#             imgs = imgs.to(device)
-#             masks = masks.to(device)
-
-#             print("   Shapes:", imgs.shape, masks.shape)
-
-#             preds = model(imgs)
-#             print("   Forward pass done")
-
-#             loss = loss_fn(preds, masks)
-#             print("   Loss:", loss.item())
-
-#             optimizer.zero_grad()
-#             loss.backward()
-#             print("   Backward done")
-
-#             optimizer.step()
-#             print("   Step done")
-
-#         except Exception as e:
-#             print(" ERROR OCCURRED:", e)
-#             break
-
-#         total_loss += loss.item()
-
-#         loop.set_description(f"Epoch {epoch+1}")
-#         loop.set_postfix(loss=loss.item())
-
-#     avg_loss = total_loss / len(loader)
-
-#     print(f"\nEpoch {epoch+1} DONE")
-#     print(f"Total Loss: {total_loss:.4f}")
-#     print(f"Avg Loss: {avg_loss:.4f}")
-
-#     # save model every epoch
-#     torch.save(model.state_dict(), "unet.pth")
-#     print(" Model Saved")
-
 
 for epoch in range(epochs):
     model.train()

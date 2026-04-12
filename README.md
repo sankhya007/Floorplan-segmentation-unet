@@ -14,12 +14,35 @@ A deep learning-based system to **parse architectural floorplans**, extract stru
 
 ---
 
+## Recent Improvements
+
+- **Adaptive stride tuning**
+
+  - Found optimal stride (~100) instead of fixed 128
+  - Improves sampling diversity and reduces stitching artifacts
+
+- **Edge-aware padding (NEW)**
+
+  - Added ~5% reflective padding before inference
+  - Eliminates boundary artifacts and improves corner predictions
+
+- **Improved stitching stability**
+
+  - Better overlap distribution across patches
+  - Reduces repetition and seam artifacts
+
+- **Debug visualization**
+
+  - Raw probability maps (`debug_raw_mask.png`) added
+  - Helps analyze model confidence before thresholding
+
+
 ## Results
 
 ### Original Floorplan
 
 <p align="center">
-  <img src="assets/original.jpg" width="500"/>
+  <img src="assets/original.jpg" width="50%"/>
 </p>
 
 ---
@@ -27,7 +50,7 @@ A deep learning-based system to **parse architectural floorplans**, extract stru
 ### Raw Model Prediction (Before Fix)
 
 <p align="center">
-  <img src="assets/prediction.jpg" width="500"/>
+  <img src="assets/prediction.jpg" width="50%"/>
 </p>
 
 ---
@@ -35,10 +58,16 @@ A deep learning-based system to **parse architectural floorplans**, extract stru
 ### Final Stitched Output (After Fix)
 
 <p align="center">
-  <img src="assets/stitched.png" width="500"/>
+  <img src="assets/stitched.png" width="50%"/>
 </p>
 
 ---
+
+###  Debug of The Raw Masked Image
+
+<p align="center">
+  <img src="assets/debug_raw_mask.png" width="50%"/>
+</p>
 
 ## Problem Faced
 
@@ -86,6 +115,7 @@ Center → Strong
 Edges  → Weak  
 
 This removes:
+
 - seams
 - edge artifacts
 - broken walls
@@ -110,16 +140,23 @@ final_mask = sum(predictions * weights) / sum(weights)
 ## Pipeline
 
 ```
+
         Input Image  
-            V 
+            V
+   Add reflective padding (~5%)
+            V
 Split into overlapping patches  
             V  
       UNet Prediction  
             V  
      Weighted blending  
             V  
+    Remove padding  
+            V  
     Final stitched mask  
+
 ```
+
 
 ---
 
@@ -221,7 +258,7 @@ Large floorplans are processed using a **sliding window approach with overlap**.
 ### Visualization
 
 <p align="center">
-  <img src="assets/stitching_diagram.png" width="500"/><br>
+  <img src="assets/stitching_diagram.png" width="50%"/><br>
   <em>Overlapping patch concept for stitching</em>
 </p>
 
@@ -230,7 +267,7 @@ Large floorplans are processed using a **sliding window approach with overlap**.
 ### Stitching in Action
 
 <p align="center">
-  <img src="assets/stitching.gif" width="500"/><br>
+  <img src="assets/stitching.gif" width="50%"/><br>
   <em>Sliding window stitching in action</em>
 </p>
 
@@ -261,9 +298,11 @@ With overlap:
 
 ## Key Achievement
 
-- Successfully solved large floorplan parsing issue  
-- Eliminated edge artifacts using overlap + blending  
-- Improved segmentation quality significantly  
+- Significantly improved large-scale floorplan segmentation
+- Reduced edge artifacts using overlap + padding + blending
+- Stabilized patch-based inference across different stride settings
+- Achieved more consistent wall reconstruction on large layouts
+
 
 ---
 
