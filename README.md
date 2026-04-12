@@ -42,7 +42,7 @@ A deep learning-based system to **parse architectural floorplans**, extract stru
 ### Original Floorplan
 
 <p align="center">
-  <img src="assets/original.jpg" width="50%"/>
+  <img src="assets/original.jpg" width="40%"/>
 </p>
 
 ---
@@ -50,7 +50,7 @@ A deep learning-based system to **parse architectural floorplans**, extract stru
 ### Raw Model Prediction (Before Fix)
 
 <p align="center">
-  <img src="assets/prediction.jpg" width="50%"/>
+  <img src="assets/prediction.jpg" width="40%"/>
 </p>
 
 ---
@@ -58,7 +58,7 @@ A deep learning-based system to **parse architectural floorplans**, extract stru
 ### Final Stitched Output (After Fix)
 
 <p align="center">
-  <img src="assets/stitched.png" width="50%"/>
+  <img src="assets/stitched.png" width="40%"/>
 </p>
 
 ---
@@ -66,7 +66,7 @@ A deep learning-based system to **parse architectural floorplans**, extract stru
 ###  Debug of The Raw Masked Image
 
 <p align="center">
-  <img src="assets/debug_raw_mask.png" width="50%"/>
+  <img src="assets/debug_raw_mask.png" width="40%"/>
 </p>
 
 ## Problem Faced
@@ -258,7 +258,7 @@ Large floorplans are processed using a **sliding window approach with overlap**.
 ### Visualization
 
 <p align="center">
-  <img src="assets/stitching_diagram.png" width="50%"/><br>
+  <img src="assets/stitching_diagram.png" width="40%"/><br>
   <em>Overlapping patch concept for stitching</em>
 </p>
 
@@ -267,7 +267,7 @@ Large floorplans are processed using a **sliding window approach with overlap**.
 ### Stitching in Action
 
 <p align="center">
-  <img src="assets/stitching.gif" width="50%"/><br>
+  <img src="assets/stitching.gif" width="40%"/><br>
   <em>Sliding window stitching in action</em>
 </p>
 
