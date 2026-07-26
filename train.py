@@ -7,6 +7,8 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 
+"""to train the model try using google collab if possible or else this code is not written in a way that it can utilize yout gpu, it's because i do not own one. The mask of the dataset images and the respective images are uploaded into hugging face download it and upload that into the google drive and then use it from there, the zipe file is a combination of CubiCasa5k and Modified Swiss Dewelling datasets"""
+
 # DATASET 
 class FloorplanDataset(Dataset):
     def __init__(self, img_dir, mask_dir):
