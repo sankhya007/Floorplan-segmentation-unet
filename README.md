@@ -1,332 +1,200 @@
-# Floorplan Parser & Segmentation System
+# S.T.I.T.C.H
+### Segmentation & Tiled Inference for TopologicalChard Handling
 
-A deep learning-based system to **parse architectural floorplans**, extract structural layouts, and prepare them for **simulation and analysis**.
-
----
-
-## Features
-
-- UNet-based floorplan segmentation
-- Patch-based inference for large images
-- Overlapping tile stitching (edge-aware)
-- Accurate wall extraction from floorplans
-- Handles large-scale layouts efficiently
+> Floorplan wall segmentation using UNet — built to feed structural data into **[T.R.A.G.I.C](https://github.com/sankhya007/T.R.A.G.I.C-Crowd-Evac)**, a real-time crowd evacuation simulation system.
 
 ---
 
-## Recent Improvements
+## What This Does
 
-- **Adaptive stride tuning**
+You give it a floorplan image. It gives you back a binary mask — walls white, walkable space black. Clean, fast, and accurate enough to drive a simulation.
 
-  - Found optimal stride (~100) instead of fixed 128
-  - Improves sampling diversity and reduces stitching artifacts
+That mask then feeds directly into T.R.A.G.I.C, where agents navigate the parsed layout in real time during evacuation scenarios.
 
-- **Edge-aware padding (NEW)**
+No manual annotation. No CAD software. Just a floorplan image and a trained model.
 
-  - Added ~5% reflective padding before inference
-  - Eliminates boundary artifacts and improves corner predictions
+---
 
-- **Improved stitching stability**
+## Why It Exists
 
-  - Better overlap distribution across patches
-  - Reduces repetition and seam artifacts
+Evacuation simulations need accurate spatial maps. Getting those maps from raw architectural drawings is a pain — especially when the drawings have diagonal walls, rotated layouts, or non-standard structure.
 
-- **Debug visualization**
+S.T.I.T.C.H solves that. It parses the floorplan automatically and hands off a usable wall mask to the simulation layer.
 
-  - Raw probability maps (`debug_raw_mask.png`) added
-  - Helps analyze model confidence before thresholding
- 
-- **Added trained weights**
-  - here is the direct link to the trained weights in hugging face
-     https://huggingface.co/sankhya007/Floorplan_parser_STITCH/tree/main
-  - download it and make sure that it is in yout root folder 
+---
 
+## How It Works
+
+Large floorplans can't just be resized and thrown at a model — you lose detail and break walls. Instead:
+
+```
+Input Image
+    ↓
+Add ~5% reflective padding
+    ↓
+Sliding window (256×256 patches, 50% overlap)
+    ↓
+UNet inference on each patch
+    ↓
+Gaussian-weighted blending (center = high confidence, edges = low)
+    ↓
+Remove padding
+    ↓
+Binary mask — walls white, space black
+```
+
+The Gaussian blending is the key bit. Without it you get seams, broken edges, and missing walls at patch boundaries. With it the stitching is seamless.
+
+---
+
+## Model
+
+- **Architecture:** UNet with BatchNorm
+- **Input:** 256×256 RGB floorplan image
+- **Output:** Binary segmentation mask
+- **Loss:** BCEWithLogitsLoss
+- **Optimizer:** Adam (lr=1e-4)
+- **Epochs:** 15
+- **Training data:** ~10,000 floorplan images
+
+---
+
+## Training Data
+
+Trained on a combined dataset of two sources:
+
+**1. CubiCasa5K**
+~5,000 annotated floorplans with wall, door, and window labels in COCO format.
+Doors are cut out of the mask (dilated removal) to create clean walkable gaps.
+→ https://github.com/CubiCasa/CubiCasa5k
+
+**2. Modified Swiss Dwellings (MSD)**
+~5,000+ floorplans of multi-unit Swiss residential buildings.
+Covers diagonal walls, rotated layouts, and complex multi-apartment structures that CubiCasa doesn't have.
+→ https://github.com/caspervanengelenburg/msd
+
+Combining both datasets significantly improves performance on non-axis-aligned walls.
+
+---
+
+## Trained Weights
+
+Download from HuggingFace and place in the project root:
+
+🔗 https://huggingface.co/sankhya007/Floorplan_parser_STITCH/tree/main
+
+---
 
 ## Results
 
-### Original Floorplan
+| | |
+|---|---|
+| **Original floorplan** | **Parsed wall mask** |
+| <img src="assets/original.jpg" width="300"/> | <img src="assets/stitched.png" width="300"/> |
 
-<p align="center">
-  <img src="assets/original.jpg" width="40%"/>
-</p>
-
----
-
-### Raw Model Prediction (Before Fix)
-
-<p align="center">
-  <img src="assets/prediction.jpg" width="40%"/>
-</p>
-
----
-
-### Final Stitched Output (After Fix)
-
-<p align="center">
-  <img src="assets/stitched.png" width="40%"/>
-</p>
-
----
-
-###  Debug of The Raw Masked Image
-
+### Debug — Raw probability map before thresholding
 <p align="center">
   <img src="assets/debug_raw_mask.png" width="40%"/>
 </p>
 
-## Problem Faced
-
-When running segmentation on large floorplans:
-
-- Model performed poorly on full-size images  
-- Edges were broken or missing  
-- Large layouts were not parsed correctly  
-- Context loss at boundaries  
+### Stitching in action
+<p align="center">
+  <img src="assets/stitching.gif" width="40%"/>
+</p>
 
 ---
 
-## Solution: Patch-Based Segmentation + Smart Stitching
+## Installation
 
-To fix this, we implemented a **sliding window inference system with overlap and blending**.
-
----
-
-### Step 1: Image Tiling
-
-- Split large image into smaller patches (e.g., 256×256)
-- Allows model to focus on local features
-
----
-
-### Step 2: Overlapping Inference
-
-- Use stride < patch size  
-- Example:
-  Patch Size = 256  
-  Stride     = 128  
-
-- Each region is predicted multiple times
-
----
-
-### Step 3: Weighted Blending (Key Insight)
-
-- Center of patch = high confidence  
-- Edges = low confidence  
-
-Weight map concept:
-
-Center → Strong  
-Edges  → Weak  
-
-This removes:
-
-- seams
-- edge artifacts
-- broken walls
-
----
-
-### Step 4: Stitching
-
-We combine all patch predictions using:
-
-- weighted accumulation
-- normalization
-
-Final formula:
-
-```
-final_mask = sum(predictions * weights) / sum(weights)
+```bash
+git clone https://github.com/sankhya007/S.T.I.T.C.H
+cd S.T.I.T.C.H
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ```
 
 ---
 
-## Pipeline
+## Usage
 
+**Single image:**
+```bash
+python predict.py
 ```
 
-        Input Image  
-            V
-   Add reflective padding (~5%)
-            V
-Split into overlapping patches  
-            V  
-      UNet Prediction  
-            V  
-     Weighted blending  
-            V  
-    Remove padding  
-            V  
-    Final stitched mask  
-
+**Large floorplan (tiled inference):**
+```bash
+python predict_tiled.py
 ```
 
+Set `IMAGE_PATH` in either script to your input file. Output saves as `prediction.png` or `stitched_mask.png`.
 
 ---
 
 ## Project Structure
 
 ```
-parser-model/
-├── model.py
-├── train.py
-├── predict.py
-├── predict_tiled.py
-├── diagram_stitch.py
+S.T.I.T.C.H/
+├── model.py              # UNet architecture
+├── train.py              # Training loop
+├── predict.py            # Single image inference
+├── predict_tiled.py      # Tiled inference for large images
+├── dataset.py            # Dataset loader
+├── convert_cubicasa.py   # CubiCasa → binary mask converter
+├── convert_msd.py        # MSD → binary mask converter
+├── diagram_stitch.py     # Generates stitching visualization GIF
 ├── assets/
-│ ├── original.png
-│ ├── prediction.png
-│ ├── stitched.png
-│ ├── stitching_diagram.png
-│ └── stitching.gif
-├── README.md
+│   ├── original.jpg
+│   ├── stitched.png
+│   ├── debug_raw_mask.png
+│   └── stitching.gif
+├── requirements.txt
 ├── LICENSE
-└── .gitignore
+└── README.md
 ```
 
 ---
 
-## python
+## Part Of
 
-python version used: 3.10.x
+S.T.I.T.C.H is the perception layer of a larger system:
 
----
-
-## Dataset
-
-This project was trained using the **CubiCasa5K** dataset.
-
-CubiCasa5K is a large-scale annotated floorplan dataset containing detailed architectural layouts with semantic labels.
-
-Due to size and licensing constraints, the dataset is not included in this repository.
-
-You can access the dataset here:  
-https://github.com/CubiCasa/CubiCasa5k
-
-If you use this dataset in your work, please consider citing the original authors.
-
----
-
-## Installation 
-
-```
-pip install torch torchvision opencv-python numpy imageio
-```
+**[T.R.A.G.I.C — Crowd Evacuation Simulation](https://github.com/sankhya007/T.R.A.G.I.C-Crowd-Evac)**
+Real-time agent-based evacuation simulation that uses the wall masks produced by this model to define navigable space and run crowd flow analysis.
 
 ---
 
 ## Requirements
 
+- Python 3.10+
+- PyTorch
+- OpenCV
+- NumPy
+- tqdm
+- pycocotools (for dataset conversion only)
+
+```bash
+pip install -r requirements.txt
 ```
- pip install -r requirements.txt
-```
-
----
-
-## How to Run / Usage
-
-python predict_tiled.py
-
----
-
-## Model Details
-
-- Architecture: UNet  
-- Training data: ~1000 floorplan images  
-- Training epochs: 15  
-- Input resolution: 256 × 256  
 
 ---
 
 ## Limitations
 
-- Model is trained on limited data and may not generalize to all architectural styles  
-- Fine details such as doors and furniture are not explicitly modeled  
-- Performance depends on preprocessing consistency  
-
----
-
-## How Stitching Works
-
-Large floorplans are processed using a **sliding window approach with overlap**.
-
-### Step-by-step:
-
-1. The image is split into overlapping patches  
-2. Each patch is passed through the model  
-3. Predictions are combined using a weighted map  
-4. Overlapping regions are averaged to remove seams  
-
----
-
-### Visualization
-
-<p align="center">
-  <img src="assets/stitching_diagram.png" width="40%"/><br>
-  <em>Overlapping patch concept for stitching</em>
-</p>
-
----
-
-### Stitching in Action
-
-<p align="center">
-  <img src="assets/stitching.gif" width="40%"/><br>
-  <em>Sliding window stitching in action</em>
-</p>
-
-The diagram explains how overlapping patches work, while the GIF shows the sliding window processing across the image in real time.
-
----
-
-### Why Overlap Matters
-
-Without overlap:
-- Broken edges
-- Missing walls  
-
-With overlap:
-- Smooth transitions
-- Accurate structure  
-
----
-
-## Important Notes
-
-- Full-image inference is unreliable for large layouts  
-- Always use tiled inference for best results  
-- Preprocessing must match training pipeline  
-- Normalization is critical for correct predictions  
-
----
-
-## Key Achievement
-
-- Significantly improved large-scale floorplan segmentation
-- Reduced edge artifacts using overlap + padding + blending
-- Stabilized patch-based inference across different stride settings
-- Achieved more consistent wall reconstruction on large layouts
-
-
----
-
-## Future Improvements
-
-- Multi-scale inference  
-- Test-time augmentation  
-- Vectorization of wall structures  
-- Integration with evacuation simulation systems  
-- Detection of semantic elements (doors, exits)  
+- Trained on residential floorplans — may not generalize to industrial or highly irregular layouts
+- Furniture and fine interior details are not segmented
+- Very thin walls may be missed depending on image resolution
 
 ---
 
 ## License
 
-This project is licensed under the MIT License.
+MIT — do what you want, give credit if it helped.
 
 ---
 
-## Author 
+## Author
 
-Sankhyapriyo Dey
+**Sankhyapriyo Dey**
+Building tools that will make my jobs obsolete.
