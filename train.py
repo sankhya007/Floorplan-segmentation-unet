@@ -1,55 +1,3 @@
-# import torch
-# from torch.utils.data import DataLoader
-# import torch.nn as nn
-# import torch.optim as optim
-
-# from dataset import FloorplanDataset
-# from model import UNet
-
-# device = "cuda" if torch.cuda.is_available() else "cpu"
-
-# dataset = FloorplanDataset("dataset/images", "dataset/masks")
-# loader = DataLoader(dataset, batch_size=1, shuffle=True)
-
-# model = UNet().to(device)
-# optimizer = optim.Adam(model.parameters(), lr=1e-3)
-# loss_fn = nn.BCEWithLogitsLoss()
-
-# epochs = 10
-
-# for epoch in range(epochs):
-#     total_loss = 0
-
-#     for i, (imgs, masks) in enumerate(loader):
-        
-#         imgs = imgs.to(device)
-#         masks = masks.to(device)
-
-#         preds = model(imgs)
-#         loss = loss_fn(preds, masks)
-
-#         optimizer.zero_grad()
-#         loss.backward()
-#         optimizer.step()
-
-#         total_loss += loss.item()
-        
-#         if i % 10 == 0:
-#             print(f"Epoch {epoch+1}, Step {i}, Loss: {loss.item():.4f}")
-
-#     print(f"Epoch {epoch+1} DONE, Total Loss: {total_loss:.4f}")
-#     avg_loss = total_loss / len(loader)
-#     print(f"Epoch {epoch+1} DONE, Avg Loss: {avg_loss:.4f}")
-#     torch.save(model.state_dict(), "unet.pth")
-#     print("Model Saved !")
-
-
-
-
-
-
-
-
 import os
 import cv2
 import torch
@@ -170,7 +118,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 dataset = FloorplanDataset("dataset/images", "dataset/masks")
 print("Total images:", len(dataset))
-dataset.img_names = dataset.img_names[:3000]  # if you want to limit the numer of images you are doing the training on use this line 
+dataset.img_names = dataset.img_names[:10000]  # if you want to limit the numer of images you are doing the training on use this line 
 loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0)
 print(f"Total batches: {len(loader)}")
 model = UNet().to(device)
@@ -179,7 +127,7 @@ loss_fn = nn.BCEWithLogitsLoss()
 
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
-epochs = 15
+epochs = 3
 
 
 # TRAIN LOOP

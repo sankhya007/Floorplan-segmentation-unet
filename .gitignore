@@ -6,6 +6,12 @@ __pycache__/
 dataset/
 used_datasets/
 
+# virtual enviorment
+venv/
+
+# binary mask dataset zip file for google collab 
+dataset.zip
+
 # large files
 *.pth
 
