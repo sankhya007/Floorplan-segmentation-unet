@@ -15,6 +15,7 @@ pycocotools
 
 # Image handling
 Pillow
+imageio
 
 # Training utilities
 tqdm

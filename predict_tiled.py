@@ -1,253 +1,145 @@
-# import torch
-# import cv2
-# import numpy as np
-
-# #--------------------------CONFIG------------------------------------
-# MODEL_PATH = "unet.pth"   # change if needed
-# IMAGE_PATH = r"C:\Users\Asus\parser-model\test.jpg"
-
-# PATCH_SIZE = 256
-# STRIDE = 150   # 50% overlap (IMPORTANT)
-
-# DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# #---------------------------------------------------------------------
-
-# from model import UNet   # import  model
-
-# model = UNet()          # create model
-
-# state_dict = torch.load(MODEL_PATH, map_location=DEVICE)
-# model.load_state_dict(state_dict)  # load weights
-# model.to(DEVICE)
-# model.eval()
-
-# def preprocess_patch(patch):
-#     # patch = patch / 255.0   # this one worked when the image was a bit smaller 
-#     patch = patch.astype(np.float32) / 255.0
-#     patch = np.transpose(patch, (2, 0, 1))
-#     patch = torch.from_numpy(patch).unsqueeze(0)
-#     return patch.to(DEVICE)
-
-# #here we are using gaussian blur to blend thats why the corners are getting fucked 
-# def create_weight_map(size):
-#     h, w = size, size
-#     y, x = np.ogrid[-1:1:h*1j, -1:1:w*1j]
-#     weight = np.exp(-(x**2 + y**2) * 4)   # gaussian
-#     return weight.astype(np.float32)
-
-# weight_map = create_weight_map(PATCH_SIZE)
-
-# img = cv2.imread(IMAGE_PATH)
-# img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-# H, W, _ = img.shape
-# print("H, W:", H, W)
-
-# final_mask = np.zeros((H, W), dtype=np.float32)
-# weight_sum = np.zeros((H, W), dtype=np.float32)
-
-# y_positions = list(range(0, H - PATCH_SIZE, STRIDE))
-# x_positions = list(range(0, W - PATCH_SIZE, STRIDE))
-
-# if y_positions[-1] != H - PATCH_SIZE:
-#     y_positions.append(H - PATCH_SIZE)
-
-# if x_positions[-1] != W - PATCH_SIZE:
-#     x_positions.append(W - PATCH_SIZE)
-
-# for y1 in y_positions:
-#     for x1 in x_positions:
-
-#         print("Processing patch at:", y1, x1)
-
-#         patch = img[y1:y1+PATCH_SIZE, x1:x1+PATCH_SIZE]
-#         if patch.shape[0] != PATCH_SIZE or patch.shape[1] != PATCH_SIZE:
-#             pad_h = PATCH_SIZE - patch.shape[0]
-#             pad_w = PATCH_SIZE - patch.shape[1]
-#             patch = cv2.copyMakeBorder(
-#                 patch, 
-#                 0, pad_h, 
-#                 0, pad_w, 
-#                 cv2.BORDER_REFLECT
-#             )
-
-#         patch_tensor = preprocess_patch(patch)
-
-#         with torch.no_grad():
-#             pred = model(patch_tensor)
-
-#         pred = torch.sigmoid(pred).squeeze().cpu().numpy()
-#         pred = np.clip(pred, 0.05, 0.95)
-
-#         weighted_pred = pred * weight_map
-
-#         final_mask[y1:y1+PATCH_SIZE, x1:x1+PATCH_SIZE] += weighted_pred
-#         weight_sum[y1:y1+PATCH_SIZE, x1:x1+PATCH_SIZE] += weight_map
-        
-
-# print("Before normalize min/max:", final_mask.min(), final_mask.max())
-# print("Weight sum min/max:", weight_sum.min(), weight_sum.max())
-
-# weight_sum[weight_sum == 0] = 1e-8
-# final_mask = final_mask / weight_sum
-
-# # DEBUG (visualize raw probabilities)
-# cv2.imwrite("debug_raw_mask.png", (final_mask * 255).astype(np.uint8))
-# binary_mask = (final_mask > 0.5).astype(np.uint8)
-
-
-# kernel = np.ones((3,3), np.uint8)
-# binary_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_CLOSE, kernel)
-# binary_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_OPEN, kernel)
-# binary_mask = cv2.dilate(binary_mask, np.ones((2,2), np.uint8), iterations=1)
-
-# print("Binary mask unique values:", np.unique(binary_mask))
-# cv2.imwrite("stitched_mask.png", binary_mask * 255)
-
-# print("Saved: stitched_mask.png")
-
-
-
-
-
-
-
-
-
-
-
-
 import torch
 import cv2
 import numpy as np
-
-# -------------------------- CONFIG ------------------------------------
-MODEL_PATH = "unet.pth"
-IMAGE_PATH = r"C:\Users\Asus\parser-model\test.jpg"
-
-PATCH_SIZE = 256
-STRIDE = 128   #50% for each block 
-
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# ----------------------------------------------------------------------
-
+import argparse
+import os
 from model import UNet
 
-model = UNet()
-state_dict = torch.load(MODEL_PATH, map_location=DEVICE)
-model.load_state_dict(state_dict)
-model.to(DEVICE)
-model.eval()
+"""
+Tiled inference script for S.T.I.T.C.H floorplan segmentation.
+
+Usage:
+  python predict_tiled.py --image path/to/floorplan.jpg
+
+Optional:
+  --model   path to weights file (default: unet_best.pth)
+  --stride  patch stride in pixels (default: 128, lower = slower but smoother)
+  --output  output filename (default: stitched_mask.png)
+"""
+
+# ------------------------------ CONFIG ------------------------------
+PATCH_SIZE = 256
+# --------------------------------------------------------------------
+
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument("--image",  required=True,         help="Path to input floorplan image")
+    p.add_argument("--model",  default="unet_best.pth", help="Path to model weights")
+    p.add_argument("--stride", type=int, default=128,  help="Patch stride (lower = smoother)")
+    p.add_argument("--output", default="stitched_mask.png", help="Output filename")
+    return p.parse_args()
 
 
-def preprocess_patch(patch):
+def preprocess_patch(patch, device):
     patch = patch.astype(np.float32) / 255.0
     patch = np.transpose(patch, (2, 0, 1))
-    patch = torch.from_numpy(patch).unsqueeze(0)
-    return patch.to(DEVICE)
+    return torch.from_numpy(patch).unsqueeze(0).to(device)
 
 
 def create_weight_map(size):
-    h, w = size, size
-    y, x = np.ogrid[-1:1:h*1j, -1:1:w*1j]
+    y, x = np.ogrid[-1:1:size*1j, -1:1:size*1j]
     weight = np.exp(-(x**2 + y**2) * 4)
     return weight.astype(np.float32)
 
 
-weight_map = create_weight_map(PATCH_SIZE)
+def main():
+    args   = parse_args()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
-# -------------------- LOAD IMAGE --------------------
-img = cv2.imread(IMAGE_PATH)
-img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    if not os.path.exists(args.model):
+        raise FileNotFoundError(f"Model weights not found: {args.model}")
+    if not os.path.exists(args.image):
+        raise FileNotFoundError(f"Image not found: {args.image}")
 
-H, W, _ = img.shape
-print("Original H, W:", H, W)
+    model = UNet()
+    model.load_state_dict(torch.load(args.model, map_location=device))
+    model.to(device)
+    model.eval()
+    print(f"Model loaded: {args.model}")
 
-# -------------------- ADD 5% PADDING --------------------
-pad_h = int(0.05 * H)
-pad_w = int(0.05 * W)
+    img = cv2.imread(args.image)
+    if img is None:
+        raise ValueError(f"Could not read image: {args.image}")
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-img = cv2.copyMakeBorder(
-    img,
-    pad_h, pad_h,
-    pad_w, pad_w,
-    cv2.BORDER_REFLECT_101
-)
+    H, W, _ = img.shape
+    print(f"Original H, W: {H}, {W}")
 
-padded_H, padded_W, _ = img.shape
-print("Padded H, W:", padded_H, padded_W)
+    # 5% reflective padding — reduces edge artifacts
+    pad_h = int(0.05 * H)
+    pad_w = int(0.05 * W)
+    img = cv2.copyMakeBorder(img, pad_h, pad_h, pad_w, pad_w, cv2.BORDER_REFLECT_101)
+    padded_H, padded_W, _ = img.shape
+    print(f"Padded H, W: {padded_H}, {padded_W}")
 
-# -------------------- INIT MASKS --------------------
-final_mask = np.zeros((padded_H, padded_W), dtype=np.float32)
-weight_sum = np.zeros((padded_H, padded_W), dtype=np.float32)
+    weight_map = create_weight_map(PATCH_SIZE)
+    final_mask = np.zeros((padded_H, padded_W), dtype=np.float32)
+    weight_sum = np.zeros((padded_H, padded_W), dtype=np.float32)
 
-# -------------------- PATCH GRID --------------------
-y_positions = list(range(0, padded_H - PATCH_SIZE, STRIDE))
-x_positions = list(range(0, padded_W - PATCH_SIZE, STRIDE))
+    STRIDE = args.stride
+    y_positions = list(range(0, padded_H - PATCH_SIZE, STRIDE))
+    x_positions = list(range(0, padded_W - PATCH_SIZE, STRIDE))
+    if y_positions[-1] != padded_H - PATCH_SIZE:
+        y_positions.append(padded_H - PATCH_SIZE)
+    if x_positions[-1] != padded_W - PATCH_SIZE:
+        x_positions.append(padded_W - PATCH_SIZE)
 
-if y_positions[-1] != padded_H - PATCH_SIZE:
-    y_positions.append(padded_H - PATCH_SIZE)
+    total_patches = len(y_positions) * len(x_positions)
+    print(f"Running inference on {total_patches} patches...")
 
-if x_positions[-1] != padded_W - PATCH_SIZE:
-    x_positions.append(padded_W - PATCH_SIZE)
+    for y1 in y_positions:
+        for x1 in x_positions:
+            patch = img[y1:y1+PATCH_SIZE, x1:x1+PATCH_SIZE]
+            if patch.shape[0] != PATCH_SIZE or patch.shape[1] != PATCH_SIZE:
+                ph = PATCH_SIZE - patch.shape[0]
+                pw = PATCH_SIZE - patch.shape[1]
+                patch = cv2.copyMakeBorder(patch, 0, ph, 0, pw, cv2.BORDER_REFLECT_101)
 
-# -------------------- INFERENCE LOOP --------------------
-for y1 in y_positions:
-    for x1 in x_positions:
+            patch_tensor = preprocess_patch(patch, device)
+            with torch.no_grad():
+                pred = model(patch_tensor)
+            pred = torch.sigmoid(pred).squeeze().cpu().numpy()
+            pred = np.clip(pred, 0.05, 0.95)
 
-        print("Processing patch at:", y1, x1)
+            final_mask[y1:y1+PATCH_SIZE, x1:x1+PATCH_SIZE] += pred * weight_map
+            weight_sum[y1:y1+PATCH_SIZE, x1:x1+PATCH_SIZE] += weight_map
 
-        patch = img[y1:y1+PATCH_SIZE, x1:x1+PATCH_SIZE]
+    weight_sum[weight_sum == 0] = 1e-8
+    final_mask = final_mask / weight_sum
 
-        if patch.shape[0] != PATCH_SIZE or patch.shape[1] != PATCH_SIZE:
-            pad_h2 = PATCH_SIZE - patch.shape[0]
-            pad_w2 = PATCH_SIZE - patch.shape[1]
-            patch = cv2.copyMakeBorder(
-                patch,
-                0, pad_h2,
-                0, pad_w2,
-                cv2.BORDER_REFLECT_101
-            )
+    # remove padding
+    final_mask = final_mask[pad_h:pad_h + H, pad_w:pad_w + W]
 
-        patch_tensor = preprocess_patch(patch)
+    cv2.imwrite("debug_raw_mask.png", (final_mask * 255).astype(np.uint8))
+    print("Debug mask saved: debug_raw_mask.png")
 
-        with torch.no_grad():
-            pred = model(patch_tensor)
+    # binarize
+    binary_mask = (final_mask > 0.5).astype(np.uint8)
+    kernel = np.ones((3, 3), np.uint8)
+    binary_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_CLOSE, kernel)
+    binary_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_OPEN, kernel)
+    binary_mask = cv2.dilate(binary_mask, np.ones((2, 2), np.uint8), iterations=1)
 
-        pred = torch.sigmoid(pred).squeeze().cpu().numpy()
-        pred = np.clip(pred, 0.05, 0.95)
+    # remove text / symbols
+    # text blobs are small AND roughly square; walls are large AND elongated
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary_mask, connectivity=8)
+    cleaned = np.zeros_like(binary_mask)
+    for i in range(1, num_labels):
+        area   = stats[i, cv2.CC_STAT_AREA]
+        w_box  = stats[i, cv2.CC_STAT_WIDTH]
+        h_box  = stats[i, cv2.CC_STAT_HEIGHT]
+        aspect = max(w_box, h_box) / (min(w_box, h_box) + 1e-6)
+        # tune area < 80 if small wall stubs are being dropped
+        # tune aspect < 3.0 if merged text rows survive the filter
+        if area < 80 and aspect < 3.0:
+            continue
+        cleaned[labels == i] = 1
+    binary_mask = cleaned
 
-        weighted_pred = pred * weight_map
+    cv2.imwrite(args.output, binary_mask * 255)
+    print(f"✅ Saved: {args.output}")
 
-        final_mask[y1:y1+PATCH_SIZE, x1:x1+PATCH_SIZE] += weighted_pred
-        weight_sum[y1:y1+PATCH_SIZE, x1:x1+PATCH_SIZE] += weight_map
 
-# -------------------- NORMALIZE --------------------
-print("Before normalize min/max:", final_mask.min(), final_mask.max())
-print("Weight sum min/max:", weight_sum.min(), weight_sum.max())
-
-weight_sum[weight_sum == 0] = 1e-8
-final_mask = final_mask / weight_sum
-
-# -------------------- REMOVE PADDING --------------------
-final_mask = final_mask[
-    pad_h:pad_h + H,
-    pad_w:pad_w + W
-]
-
-# -------------------- SAVE DEBUG --------------------
-cv2.imwrite("debug_raw_mask.png", (final_mask * 255).astype(np.uint8))
-
-# -------------------- BINARIZE --------------------
-binary_mask = (final_mask > 0.5).astype(np.uint8)
-
-kernel = np.ones((3,3), np.uint8)
-binary_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_CLOSE, kernel)
-binary_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_OPEN, kernel)
-binary_mask = cv2.dilate(binary_mask, np.ones((2,2), np.uint8), iterations=1)
-
-print("Binary mask unique values:", np.unique(binary_mask))
-
-cv2.imwrite("stitched_mask.png", binary_mask * 255)
-
-print("Saved: stitched_mask.png")
+if __name__ == "__main__":
+    main()

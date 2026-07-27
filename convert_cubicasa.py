@@ -6,19 +6,37 @@ from tqdm import tqdm
 from pycocotools import mask as coco_mask
 import gc
 
-INPUT_BASE = "used_datasets/cc5k"         # ← updated path
-OUT_IMG = "dataset/images"
-OUT_MASK = "dataset/masks"
+"""
+Converts the CubiCasa5K COCO dataset into binary wall masks.
+
+Expected folder structure:
+  used_datasets/cc5k/
+    train/
+      _annotations.coco.json
+      *.jpg / *.png
+    valid/
+    test/
+
+Output goes to:
+  dataset/images/
+  dataset/masks/
+"""
+
+INPUT_BASE = "used_datasets/cc5k"
+OUT_IMG    = "dataset/images"
+OUT_MASK   = "dataset/masks"
 
 os.makedirs(OUT_IMG, exist_ok=True)
 os.makedirs(OUT_MASK, exist_ok=True)
 
-WALL_ID = 2
-DOOR_ID = 1
+WALL_ID   = 2
+DOOR_ID   = 1
 WINDOW_ID = 3
+WALL_THICKNESS = 6   # px — controls how thick stroke-based wall masks are drawn
 
 
 def draw_segmentation(mask, seg, class_id, h, w):
+    """Draw wall outlines as strokes (not filled) to preserve hollow walls."""
     if isinstance(seg, list) and len(seg) > 0:
         for poly in seg:
             if len(poly) < 6:
@@ -29,18 +47,23 @@ def draw_segmentation(mask, seg, class_id, h, w):
                 pts[:, 1] *= h
             pts = np.round(pts).astype(np.int32)
             if pts.shape[0] >= 3:
-                cv2.fillPoly(mask, [pts], class_id)
+                # polylines instead of fillPoly — keeps hollow walls hollow
+                cv2.polylines(mask, [pts], isClosed=True, color=class_id, thickness=WALL_THICKNESS)
         return True
 
     elif isinstance(seg, dict) and "counts" in seg:
         if isinstance(seg["counts"], list):
             rle = coco_mask.frPyObjects(seg, h, w)
-            m = coco_mask.decode(rle)
+            m   = coco_mask.decode(rle)
         else:
             m = coco_mask.decode(seg)
         if len(m.shape) == 3:
             m = np.any(m, axis=2)
-        mask[m > 0] = class_id
+        # for RLE: erode then subtract to get just the border
+        kernel  = np.ones((WALL_THICKNESS, WALL_THICKNESS), np.uint8)
+        eroded  = cv2.erode(m.astype(np.uint8), kernel)
+        border  = m.astype(np.uint8) - eroded
+        mask[border > 0] = class_id
         return True
 
     return False
@@ -56,10 +79,10 @@ def draw_bbox(mask, bbox, class_id, h, w):
 
 def convert_split(split):
     split_path = os.path.join(INPUT_BASE, split)
-    json_path = os.path.join(split_path, "_annotations.coco.json")
+    json_path  = os.path.join(split_path, "_annotations.coco.json")
 
     if not os.path.exists(json_path):
-        print(f"Skipping {split} — no annotations found")
+        print(f"Skipping {split} — no annotations found at {json_path}")
         return
 
     print(f"\nProcessing CubiCasa {split}...")
@@ -67,7 +90,7 @@ def convert_split(split):
     with open(json_path, "r") as f:
         data = json.load(f)
 
-    images = {img["id"]: img for img in data["images"]}
+    images  = {img["id"]: img for img in data["images"]}
     ann_map = {}
     for ann in data["annotations"]:
         ann_map.setdefault(ann["image_id"], []).append(ann)
@@ -77,7 +100,7 @@ def convert_split(split):
 
     for img_id, img_info in tqdm(images.items()):
         file_name = img_info["file_name"]
-        img_path = os.path.join(split_path, file_name)
+        img_path  = os.path.join(split_path, file_name)
 
         if not os.path.exists(img_path):
             continue
@@ -90,39 +113,39 @@ def convert_split(split):
         mask = np.zeros((h, w), dtype=np.uint8)
         anns = ann_map.get(img_id, [])
 
-        # PASS 1: walls + windows
+        # PASS 1: draw walls + windows as strokes
         for ann in anns:
             category = ann["category_id"]
-            seg = ann.get("segmentation", None)
-            handled = False
+            seg      = ann.get("segmentation", None)
+            handled  = False
             if category in [WALL_ID, WINDOW_ID]:
                 if seg is not None:
                     handled = draw_segmentation(mask, seg, 1, h, w)
                 if not handled and "bbox" in ann:
                     draw_bbox(mask, ann["bbox"], 1, h, w)
 
-        # PASS 2: cut out doors
+        # PASS 2: cut doors out of the wall mask
         for ann in anns:
             if ann["category_id"] != DOOR_ID:
                 continue
-            seg = ann.get("segmentation", None)
+            seg     = ann.get("segmentation", None)
             handled = False
-            temp = np.zeros_like(mask)
+            temp    = np.zeros_like(mask)
             if seg is not None:
                 handled = draw_segmentation(temp, seg, 1, h, w)
             if not handled and "bbox" in ann:
                 draw_bbox(temp, ann["bbox"], 1, h, w)
             kernel = np.ones((7, 7), np.uint8)
-            temp = cv2.dilate(temp, kernel, iterations=1)
+            temp   = cv2.dilate(temp, kernel, iterations=1)
             mask[temp > 0] = 0
 
         if np.sum(mask) == 0:
             print(f"  EMPTY MASK: {file_name}")
 
-        new_name = f"cc5k_{split}_{file_name}"
-        cv2.imwrite(os.path.join(OUT_IMG, new_name), img)
-
+        new_name    = f"cc5k_{split}_{file_name}"
         binary_mask = (mask > 0).astype(np.uint8) * 255
+
+        cv2.imwrite(os.path.join(OUT_IMG,  new_name), img)
         cv2.imwrite(os.path.join(OUT_MASK, new_name), binary_mask)
 
         del img, mask
@@ -133,4 +156,4 @@ def convert_split(split):
 for split in ["train", "valid", "test"]:
     convert_split(split)
 
-print("\n CubiCasa conversion DONE.")
+print("\n✅ CubiCasa conversion DONE.")

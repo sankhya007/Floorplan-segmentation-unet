@@ -1,20 +1,76 @@
 import os
 import cv2
 import torch
+import random
 import numpy as np
 import torch.nn as nn
 import torch.optim as optim
+import albumentations as A
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
+from model import UNet
 
-"""to train the model try using google collab if possible or else this code is not written in a way that it can utilize yout gpu, it's because i do not own one. The mask of the dataset images and the respective images are uploaded into hugging face download it and upload that into the google drive and then use it from there, the zipe file is a combination of CubiCasa5k and Modified Swiss Dewelling datasets"""
+"""
+Local training script for S.T.I.T.C.H floorplan segmentation.
 
-# DATASET 
+Setup:
+  pip install -r requirements.txt
+
+Dataset structure expected:
+  dataset/
+    images/   <- floorplan images (.png)
+    masks/    <- binary wall masks (.png)
+
+Run:
+  python train.py
+
+To generate the dataset first:
+  python convert_cubicasa.py
+  python convert_msd.py
+"""
+
+# ------------------------------ CONFIG ------------------------------
+IMG_DIR    = "dataset/images"
+MASK_DIR   = "dataset/masks"
+EPOCHS     = 15
+BATCH_SIZE = 4       # lower to 2 if you run out of VRAM
+LR         = 1e-4
+LIMIT      = None    # set to e.g. 3000 to cap training images, None = use all
+NUM_WORKERS = 4      # set to 0 on Windows if you get multiprocessing errors
+# --------------------------------------------------------------------
+
+train_transform = A.Compose([
+    A.Rotate(limit=180, p=0.8),
+    A.ElasticTransform(alpha=120, sigma=6, p=0.5),
+    A.HorizontalFlip(p=0.5),
+    A.VerticalFlip(p=0.5),
+    A.RandomBrightnessContrast(p=0.3),
+], additional_targets={'mask': 'mask'})
+
+
+def add_hard_negatives(img, mask):
+    """Stamp synthetic furniture/symbol shapes as background so the model
+    learns to ignore them."""
+    h, w = mask.shape
+    for _ in range(random.randint(2, 6)):
+        cx = random.randint(20, w - 20)
+        cy = random.randint(20, h - 20)
+        sz = random.randint(8, 30)
+        temp = np.zeros((h, w), np.uint8)
+        if random.random() < 0.5:
+            cv2.rectangle(temp, (cx - sz, cy - sz), (cx + sz, cy + sz), 1, -1)
+        else:
+            cv2.circle(temp, (cx, cy), sz, 1, -1)
+        mask[temp == 1] = 0
+    return img, mask
+
+
 class FloorplanDataset(Dataset):
-    def __init__(self, img_dir, mask_dir):
+    def __init__(self, img_dir, mask_dir, augment=False):
         self.img_names = sorted(os.listdir(img_dir))
-        self.img_dir = img_dir
-        self.mask_dir = mask_dir
+        self.img_dir   = img_dir
+        self.mask_dir  = mask_dir
+        self.augment   = augment
 
     def __len__(self):
         return len(self.img_names)
@@ -22,147 +78,96 @@ class FloorplanDataset(Dataset):
     def __getitem__(self, idx):
         name = self.img_names[idx]
 
-        # ---- IMAGE ----
-        img_path = os.path.join(self.img_dir, name)
-        img = cv2.imread(img_path)
+        img = cv2.imread(os.path.join(self.img_dir, name))
         if img is None:
-            print("BAD IMAGE:", img_path)
+            print("BAD IMAGE:", name)
             return self.__getitem__(0)
-
         img = cv2.resize(img, (256, 256))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-        img = img.astype(np.float32) / 255.0
-        img = torch.from_numpy(img).permute(2, 0, 1)
-
-        # ---- MASK ----
-        mask_path = os.path.join(self.mask_dir, name)
-        
-        mask = cv2.imread(mask_path, cv2.IMREAD_UNCHANGED)
-
+        mask = cv2.imread(os.path.join(self.mask_dir, name), cv2.IMREAD_UNCHANGED)
+        if mask is None:
+            print("BAD MASK:", name)
+            return self.__getitem__(0)
         if len(mask.shape) == 3:
             mask = mask[:, :, 0]
-
         mask = cv2.resize(mask, (256, 256), interpolation=cv2.INTER_NEAREST)
+        mask = (mask > 0).astype(np.uint8)
 
-        mask = (mask > 0).astype(np.float32)
+        if self.augment:
+            if random.random() < 0.5:
+                img, mask = add_hard_negatives(img, mask)
+            aug  = train_transform(image=img, mask=mask)
+            img  = aug['image']
+            mask = aug['mask']
+
+        img  = img.astype(np.float32) / 255.0
+        img  = torch.from_numpy(img).permute(2, 0, 1)
+        mask = mask.astype(np.float32)
         mask = torch.from_numpy(mask).unsqueeze(0)
 
         return img, mask
 
 
-# SIMPLE UNET
-class DoubleConv(nn.Module):
-    def __init__(self, in_c, out_c):
-        super().__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(in_c, out_c, 3, padding=1),
-            nn.BatchNorm2d(out_c),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(out_c, out_c, 3, padding=1),
-            nn.BatchNorm2d(out_c),
-            nn.ReLU(inplace=True)
-        )
+if __name__ == "__main__":
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device}")
+    if device == "cpu":
+        print("WARNING: training on CPU will be very slow. A GPU is strongly recommended.")
 
-    def forward(self, x):
-        return self.conv(x)
+    dataset = FloorplanDataset(IMG_DIR, MASK_DIR, augment=True)
+    if LIMIT:
+        dataset.img_names = dataset.img_names[:LIMIT]
+    print(f"Total images: {len(dataset)}")
 
+    loader = DataLoader(
+        dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=NUM_WORKERS,
+        pin_memory=(device == "cuda"),
+    )
+    print(f"Total batches per epoch: {len(loader)}")
 
-class UNet(nn.Module):
-    def __init__(self):
-        super().__init__()
+    model     = UNet().to(device)
+    optimizer = optim.Adam(model.parameters(), lr=LR)
 
-        self.d1 = DoubleConv(3, 64)
-        self.p1 = nn.MaxPool2d(2)
+    # pos_weight=3.0 — walls are sparse pixels; penalise missing them 3x more
+    loss_fn   = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([3.0]).to(device))
 
-        self.d2 = DoubleConv(64, 128)
-        self.p2 = nn.MaxPool2d(2)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', patience=2, factor=0.5, verbose=True
+    )
 
-        self.d3 = DoubleConv(128, 256)
-        self.p3 = nn.MaxPool2d(2)
+    best_loss = float('inf')
 
-        self.b = DoubleConv(256, 512)
+    for epoch in range(EPOCHS):
+        model.train()
+        total_loss = 0
+        loop = tqdm(loader, desc=f"Epoch {epoch+1}/{EPOCHS}")
 
-        self.u3 = nn.ConvTranspose2d(512, 256, 2, stride=2)
-        self.c3 = DoubleConv(512, 256)
+        for imgs, masks in loop:
+            imgs  = imgs.to(device)
+            masks = masks.to(device)
+            preds = model(imgs)
+            loss  = loss_fn(preds, masks)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+            loop.set_postfix(loss=f"{loss.item():.4f}")
 
-        self.u2 = nn.ConvTranspose2d(256, 128, 2, stride=2)
-        self.c2 = DoubleConv(256, 128)
+        avg_loss = total_loss / len(loader)
+        print(f"Epoch {epoch+1} — Avg Loss: {avg_loss:.4f}")
 
-        self.u1 = nn.ConvTranspose2d(128, 64, 2, stride=2)
-        self.c1 = DoubleConv(128, 64)
+        scheduler.step(avg_loss)
 
-        self.out = nn.Conv2d(64, 1, 1)
+        torch.save(model.state_dict(), "unet.pth")
 
-    def forward(self, x):
-        d1 = self.d1(x)
-        d2 = self.d2(self.p1(d1))
-        d3 = self.d3(self.p2(d2))
+        if avg_loss < best_loss:
+            best_loss = avg_loss
+            torch.save(model.state_dict(), "unet_best.pth")
+            print(f"  ✅ Best model saved (loss: {best_loss:.4f})")
 
-        b = self.b(self.p3(d3))
-
-        u3 = self.u3(b)
-        u3 = torch.cat([u3, d3], dim=1)
-        u3 = self.c3(u3)
-
-        u2 = self.u2(u3)
-        u2 = torch.cat([u2, d2], dim=1)
-        u2 = self.c2(u2)
-
-        u1 = self.u1(u2)
-        u1 = torch.cat([u1, d1], dim=1)
-        u1 = self.c1(u1)
-
-        return self.out(u1)
-
-# TRAINING SETUP
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
-dataset = FloorplanDataset("dataset/images", "dataset/masks")
-print("Total images:", len(dataset))
-dataset.img_names = dataset.img_names[:10000]  # if you want to limit the numer of images you are doing the training on use this line 
-loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0)
-print(f"Total batches: {len(loader)}")
-model = UNet().to(device)
-
-loss_fn = nn.BCEWithLogitsLoss()
-
-optimizer = optim.Adam(model.parameters(), lr=1e-4)
-
-epochs = 3
-
-
-# TRAIN LOOP
-
-print("Starting training...")
-
-for epoch in range(epochs):
-    model.train()
-    total_loss = 0
-
-    loop = tqdm(loader, desc=f"Epoch {epoch+1}", leave=True)
-
-    for imgs, masks in loop:
-        imgs = imgs.to(device)
-        masks = masks.to(device)
-
-        preds = model(imgs)
-        loss = loss_fn(preds, masks)
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        total_loss += loss.item()
-
-    avg_loss = total_loss / len(loader)
-
-    print(f"\nEpoch {epoch+1} DONE")
-    print(f"Total Loss: {total_loss:.4f}")
-    print(f"Avg Loss: {avg_loss:.4f}")
-
-    torch.save(model.state_dict(), "unet.pth")
-    print(" Model Saved")
-
-
-print("\n TRAINING COMPLETE")
+    print(f"\n✅ TRAINING COMPLETE — best loss: {best_loss:.4f}")
+    print("Weights saved: unet.pth (last epoch), unet_best.pth (best epoch)")

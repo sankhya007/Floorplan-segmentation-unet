@@ -21,7 +21,7 @@ class FloorplanDataset(Dataset):
         img = img / 255.0
 
         # mask = cv2.imread(os.path.join(self.mask_dir, name), cv2.IMREAD_GRAYSCALE)
-        # mask = (mask > 0).astype(np.float32)  # 🔥 IMPORTANT
+        # mask = (mask > 0).astype(np.float32)  # IMPORTANT
         
         mask = cv2.imread(os.path.join(self.mask_dir, name), cv2.IMREAD_UNCHANGED)
 
