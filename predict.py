@@ -1,38 +1,3 @@
-# import cv2
-# import torch
-# import matplotlib.pyplot as plt
-# import numpy as np
-# from model import UNet
-
-# model = UNet()
-# model.load_state_dict(torch.load("unet.pth", map_location="cpu"))
-# model.eval()
-
-# img = cv2.imread("test.jpg")
-# img_resized = cv2.resize(img, (512, 512)) / 255.0
-
-# img_tensor = torch.tensor(img_resized).permute(2,0,1).unsqueeze(0).float()
-
-# with torch.no_grad():
-#     pred = model(img_tensor)
-#     pred = torch.sigmoid(pred)  # since we removed sigmoid earlier
-#     pred = pred[0][0].numpy()
-
-# plt.imshow(pred, cmap="gray")
-# plt.title("Prediction")
-# plt.axis('off')
-# plt.show()
-
-
-
-
-
-
-
-
-
-
-
 import torch
 import cv2
 import numpy as np
