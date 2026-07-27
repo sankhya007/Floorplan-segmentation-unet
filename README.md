@@ -93,16 +93,19 @@ Download `unet.pth` from HuggingFace and place it in the root, then:
 
 **For a single small image:**
 ```bash
-# set IMAGE_PATH in predict.py first
 python predict.py
 # output → prediction.png
 ```
 
 **For large floorplans (recommended):**
 ```bash
-# set IMAGE_PATH in predict_tiled.py first
-python predict_tiled.py
+python predict_tiled.py --image path/to/floorplan.jpg
 # output → stitched_mask.png + debug_raw_mask.png
+```
+
+Optional flags:
+```bash
+python predict_tiled.py --image floorplan.jpg --model unet.pth --stride 128 --output result.png
 ```
 
 ---
@@ -158,9 +161,9 @@ The Gaussian blending eliminates seams and broken edges at patch boundaries.
 | Architecture | UNet with BatchNorm |
 | Input size | 256×256 RGB |
 | Output | Binary mask (walls=white, space=black) |
-| Loss | BCEWithLogitsLoss |
+| Loss | BCEWithLogitsLoss (pos_weight=3.0) |
 | Optimizer | Adam (lr=1e-4) |
-| Batch size | 16 |
+| Batch size | 4 |
 | Epochs | 15 |
 | Training images | ~10,000 |
 | Trained on | Google Colab T4 GPU |
@@ -218,9 +221,19 @@ pip install -r requirements.txt
 
 ## Limitations
 
-- Trained on residential floorplans — may not generalize to industrial or highly irregular layouts
-- Furniture and fine interior details are not segmented
-- Very thin walls may be missed at low image resolution
+S.T.I.T.C.H is trained on structural elements only and performs best on clean line-drawing floorplans. The following are known hard limits of the current model:
+
+**Text annotations detected as walls**
+Room labels, dimension text, and area callouts are partially detected as wall fragments. Small scattered blobs are filtered out in post-processing but text that runs parallel to a wall or merges with a nearby wall prediction is indistinguishable from a real wall segment at the patch level. This cannot be fully resolved without a dedicated text-detection suppression layer.
+
+**Crowd flow arrows detected as walls**
+Architectural drawings often include directional arrows indicating crowd flow or exit routes. These are thin and elongated, which means they pass the same geometric filters that keep real walls. Post-processing reduces this but does not eliminate it entirely.
+
+**Furniture noise in dense floorplans**
+Tables, chairs, bathtubs, and similar symbols produce false positive detections, especially when drawn touching or close to walls. The model has no concept of furniture vs structure. Hard negative training reduces this but does not fully solve it — furniture in dense, annotation-heavy drawings will still produce noise.
+
+**Not trained on non-residential layouts**
+Industrial buildings, warehouses, stadiums, and irregular architectural styles are outside the training distribution and will produce degraded results.
 
 ---
 
