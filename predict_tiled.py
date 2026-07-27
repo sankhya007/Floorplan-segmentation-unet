@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import argparse
 import os
+from tqdm import tqdm
 from model import UNet
 
 """
@@ -12,7 +13,7 @@ Usage:
   python predict_tiled.py --image path/to/floorplan.jpg
 
 Optional:
-  --model   path to weights file (default: unet_best.pth)
+  --model   path to weights file (default: unet.pth)
   --stride  patch stride in pixels (default: 128, lower = slower but smoother)
   --output  output filename (default: stitched_mask.png)
 """
@@ -23,9 +24,9 @@ PATCH_SIZE = 256
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--image",  required=True,         help="Path to input floorplan image")
-    p.add_argument("--model",  default="unet_best.pth", help="Path to model weights")
-    p.add_argument("--stride", type=int, default=128,  help="Patch stride (lower = smoother)")
+    p.add_argument("--image",  required=True,              help="Path to input floorplan image")
+    p.add_argument("--model",  default="unet.pth",         help="Path to model weights")
+    p.add_argument("--stride", type=int, default=128,      help="Patch stride (lower = smoother)")
     p.add_argument("--output", default="stitched_mask.png", help="Output filename")
     return p.parse_args()
 
@@ -88,6 +89,8 @@ def main():
     total_patches = len(y_positions) * len(x_positions)
     print(f"Running inference on {total_patches} patches...")
 
+    pbar = tqdm(total=total_patches, desc="Patching", unit="patch")
+
     for y1 in y_positions:
         for x1 in x_positions:
             patch = img[y1:y1+PATCH_SIZE, x1:x1+PATCH_SIZE]
@@ -104,6 +107,10 @@ def main():
 
             final_mask[y1:y1+PATCH_SIZE, x1:x1+PATCH_SIZE] += pred * weight_map
             weight_sum[y1:y1+PATCH_SIZE, x1:x1+PATCH_SIZE] += weight_map
+
+            pbar.update(1)
+
+    pbar.close()
 
     weight_sum[weight_sum == 0] = 1e-8
     final_mask = final_mask / weight_sum
@@ -130,8 +137,6 @@ def main():
         w_box  = stats[i, cv2.CC_STAT_WIDTH]
         h_box  = stats[i, cv2.CC_STAT_HEIGHT]
         aspect = max(w_box, h_box) / (min(w_box, h_box) + 1e-6)
-        # tune area < 80 if small wall stubs are being dropped
-        # tune aspect < 3.0 if merged text rows survive the filter
         if area < 80 and aspect < 3.0:
             continue
         cleaned[labels == i] = 1

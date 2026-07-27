@@ -233,4 +233,4 @@ MIT — use it, build on it, give credit if it helped.
 ## Author
 
 **Sankhyapriyo Dey**
-Building tools that turn architectural drawings into simulation-ready data.
+Building tools that will make my job obsolete.
