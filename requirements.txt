@@ -19,6 +19,7 @@ imageio
 
 # Training utilities
 tqdm
+segmentation_models_pytorch
 
 # (Optional but recommended for augmentations)
 albumentations
