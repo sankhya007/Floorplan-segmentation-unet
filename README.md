@@ -50,7 +50,7 @@ Two sets of weights are available. Both are on HuggingFace - download whichever 
 
 **[Download from HuggingFace](https://huggingface.co/sankhya007/Floorplan_parser_STITCH/tree/main)**
 
-**[Link to the COllab Notebook](https://colab.research.google.com/drive/1fn6An3o9qG9E5WUjsIyt1WX91mxR1gPi?usp=sharing)**
+**[Link to the Collab Notebook](https://colab.research.google.com/drive/1fn6An3o9qG9E5WUjsIyt1WX91mxR1gPi?usp=sharing)**
 
 
 | File | Script to use | Notes |
@@ -117,12 +117,6 @@ python predict_tiled.py --image path/to/floorplan.jpg --model unet.pth
 # output to stitched_mask.png + debug_raw_mask.png
 ```
 
-**TTA tiled inference (slower, smoother):**
-```bash
-python predict_tiled_tta.py --image path/to/floorplan.jpg --model unet_tta.pth
-# output to stitched_mask.png + debug_raw_mask.png
-```
-
 Optional flags (same for both tiled scripts):
 ```bash
 --stride 128    # lower = more overlap = smoother but slower
@@ -169,7 +163,6 @@ Binary mask - walls white, walkable space black
 
 The Gaussian blending eliminates seams and broken edges at patch boundaries.
 
-**TTA (Test-Time Augmentation)** runs each patch four times with different flip orientations and averages the predictions. This reduces noise and produces cleaner wall outlines at the cost of ~4x inference time.
 
 <p align="center">
   <img src="assets/stitching.gif" width="50%"/>
