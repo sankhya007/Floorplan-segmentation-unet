@@ -208,10 +208,10 @@ Trained on two datasets merged together:
 
 | Original Floorplan | Parsed Wall Mask |
 |---|---|
-| <img src="assets/original.jpg" width="300"/> | <img src="assets/stitched.png" width="300"/> |
+| <img src="assets/original_v2.jpg" width="300"/> | <img src="assets/stitched_v2.png" width="300"/> |
 
 <p align="center">
-  <img src="assets/debug_raw_mask.png" width="40%"/><br>
+  <img src="assets/debug_raw_mask_v2.png" width="40%"/><br>
   <em>Raw probability map before thresholding</em>
 </p>
 
