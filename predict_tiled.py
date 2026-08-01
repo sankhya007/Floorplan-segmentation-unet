@@ -29,17 +29,7 @@ Training sequence:
 """
 
 # ------------------------------ CONFIG ------------------------------
-PATCH_SIZE = 512
-"""
-this is the ammount of data the parser has access to while parsing 
-a single portion/segment, the more the number the more time consuming 
-it is gonna be and the smaller the littler context the parser has 
-about its enviorment, so the parsing becomes shitty
-
-N.B: make sure you change the default stride in the code or when parsing
-an image using the code and keep that to 50% of the PATCH_SIZE or else
-the parsing WILL BE INSANE...
-"""
+PATCH_SIZE = 256
 # --------------------------------------------------------------------
 
 def parse_args():
@@ -47,7 +37,6 @@ def parse_args():
     p.add_argument("--image",  required=True,              help="Path to input floorplan image")
     p.add_argument("--model",  default="unet.pth",         help="Path to model weights")
     p.add_argument("--stride", type=int, default=128,      help="Patch stride (lower = smoother)")
-    # here you can change the stride number by default it is 128, the bettre alternative is to use whatever you have in the patch size, the 50% of that(because that was kinda the benchmark to prove that this concept even works at the 1st place)
     p.add_argument("--output", default="stitched_mask.png", help="Output filename")
     return p.parse_args()
 
@@ -88,7 +77,7 @@ def main():
     H, W, _ = img.shape
     print(f"Original H, W: {H}, {W}")
 
-    # 5% reflective padding — reduces edge artifacts
+    # 5% reflective padding on each side — reduces edge artifacts
     pad_h = int(0.05 * H)
     pad_w = int(0.05 * W)
     img = cv2.copyMakeBorder(img, pad_h, pad_h, pad_w, pad_w, cv2.BORDER_REFLECT_101)
@@ -100,12 +89,12 @@ def main():
     weight_sum = np.zeros((padded_H, padded_W), dtype=np.float32)
 
     STRIDE = args.stride
-    y_positions = list(range(0, padded_H - PATCH_SIZE, STRIDE))
-    x_positions = list(range(0, padded_W - PATCH_SIZE, STRIDE))
-    if y_positions[-1] != padded_H - PATCH_SIZE:
-        y_positions.append(padded_H - PATCH_SIZE)
-    if x_positions[-1] != padded_W - PATCH_SIZE:
-        x_positions.append(padded_W - PATCH_SIZE)
+    y_positions = list(range(0, max(1, padded_H - PATCH_SIZE + 1), STRIDE))
+    x_positions = list(range(0, max(1, padded_W - PATCH_SIZE + 1), STRIDE))
+    if y_positions[-1] != max(0, padded_H - PATCH_SIZE):
+        y_positions.append(max(0, padded_H - PATCH_SIZE))
+    if x_positions[-1] != max(0, padded_W - PATCH_SIZE):
+        x_positions.append(max(0, padded_W - PATCH_SIZE))
 
     total_patches = len(y_positions) * len(x_positions)
     print(f"Running inference on {total_patches} patches...")
@@ -119,8 +108,6 @@ def main():
                 ph = PATCH_SIZE - patch.shape[0]
                 pw = PATCH_SIZE - patch.shape[1]
                 patch = cv2.copyMakeBorder(patch, 0, ph, 0, pw, cv2.BORDER_REFLECT_101)
-
-            # here the segment f used to parse a single patch once and then give an output
             
             patch_tensor = preprocess_patch(patch, device)
             with torch.no_grad():
@@ -128,31 +115,8 @@ def main():
             pred = torch.sigmoid(pred).squeeze().cpu().numpy()
             pred = np.clip(pred, 0.01, 0.99)
 
-            # here we are trying out TTA(test time augmentaion) where it is going to parse the single patch more than once, 4 times to be exact and then give an weighted average of that parsing to make sure that the parsng is done right 
-
-            # tta_pairs = [
-            #     (lambda x: x,                                           lambda x: x),
-            #     (lambda x: np.flip(x, axis=0).copy(),                  lambda x: np.flip(x, axis=0).copy()),
-            #     (lambda x: np.flip(x, axis=1).copy(),                  lambda x: np.flip(x, axis=1).copy()),
-            #     (lambda x: np.flip(np.flip(x, axis=0), axis=1).copy(), lambda x: np.flip(np.flip(x, axis=0), axis=1).copy()),
-            # ]
-
-            # patch_pred = np.zeros((PATCH_SIZE, PATCH_SIZE), dtype=np.float32)
-            # for aug, inv in tta_pairs:
-            #     tensor = preprocess_patch(aug(patch), device)
-            #     with torch.no_grad():
-            #         pred = model(tensor)
-            #     pred = torch.sigmoid(pred).squeeze().cpu().numpy()
-            #     pred = np.clip(pred, 0.01, 0.99)
-            #     patch_pred += inv(pred)
-            # patch_pred /= len(tta_pairs)
-
             final_mask[y1:y1+PATCH_SIZE, x1:x1+PATCH_SIZE] += pred * weight_map
-            weight_sum[y1:y1+PATCH_SIZE, x1:x1+PATCH_SIZE] += weight_map      # non TTA 
-
-            # final_mask[y1:y1+PATCH_SIZE, x1:x1+PATCH_SIZE] += patch_pred * weight_map
-            # weight_sum[y1:y1+PATCH_SIZE, x1:x1+PATCH_SIZE] += weight_map        # TTA
-
+            weight_sum[y1:y1+PATCH_SIZE, x1:x1+PATCH_SIZE] += weight_map      
             pbar.update(1)
 
     pbar.close()
@@ -167,38 +131,8 @@ def main():
     print("Debug mask saved: debug_raw_mask.png")
 
     # binarize
-    """
-    "final_mask > 0.5" - this number is actually a threashold
-    if the parser is not pickign up smaller walls in the given 
-    floorplan than try to decrease the number oa bit and try 
-    that out with the image.
-
-    fundamentally the threashold is working as a filter so when 
-    there is a wall in the floorplan that is thinner that it 
-    should be it(because then it might not b a wall), the threashold
-    limit filters it out of the binary image output.
-    """
-
-    # on some other universe this threasholding problem might have been solved by a automaion code, not here though(would have been nice)
-
-    # redundant code (otsu trial)
-    # raw_uint8 = (final_mask * 255).astype(np.uint8)
-    # otsu_thresh, binary_mask = cv2.threshold(raw_uint8, 0, 1, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    # print(f"Otsu threshold: {otsu_thresh}/255")
-
+    # default threshold is 0.50, you can change it to whatever you want, but the best results are at 0.50
     binary_mask = (final_mask > 0.50).astype(np.uint8)
-
-    # this portion was not doing anything this is fully redundant 
-
-    # morphological fill 
-    # kernel = np.ones((3, 3), np.uint8)
-    # binary_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_CLOSE, kernel)
-    # binary_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_OPEN, kernel)
-    # morphological dialate
-    # binary_mask = cv2.dilate(binary_mask, np.ones((2, 2), np.uint8), iterations=1)
-
-    # remove text / symbols
-    # text blobs are small AND roughly square; walls are large AND elongated
     num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary_mask, connectivity=8)
     cleaned = np.zeros_like(binary_mask)
     for i in range(1, num_labels):
@@ -206,10 +140,7 @@ def main():
         w_box  = stats[i, cv2.CC_STAT_WIDTH]
         h_box  = stats[i, cv2.CC_STAT_HEIGHT]
         aspect = max(w_box, h_box) / (min(w_box, h_box) + 1e-6)
-        # if area < (H * W) * 0.00005 and aspect < 3.0:
-        # trying to if removing the blob filter makes the parsing better, the main probel right now is thet the doors that are placed in an angle are actually not parsing properly making a blob 
         if area < (H * W) * 0.00005:
-            # cant just assume the tickness of the text in the image it has to be dynamic thats why "area < (H * W) * 0.00005"
             continue
         cleaned[labels == i] = 1
     binary_mask = cleaned
@@ -220,5 +151,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
